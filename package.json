@@ -1,10 +1,11 @@
 {
   "name": "secrets",
   "version": "0.1.0",
-  "description": "",
+  "description": "Secrets app for LAB course",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
   },
   "repository": {
     "type": "git",
@@ -12,11 +13,19 @@
   },
   "author": "Rob Ranf",
   "license": "ISC",
+  "engines": {
+    "node": "12.x"
+  },
   "bugs": {
     "url": "https://github.com/rlr524/secrets/issues"
   },
   "homepage": "https://github.com/rlr524/secrets#readme",
   "devDependencies": {
     "eslint": "^6.8.0"
+  },
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "ejs": "^3.0.1",
+    "express": "^4.17.1"
   }
 }
