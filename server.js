@@ -1,6 +1,7 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
+
 const User = require(__dirname + "/src/Users.js");
 
 const app = express();
