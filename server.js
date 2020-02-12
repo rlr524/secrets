@@ -18,7 +18,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 let sess = {
   secret: process.env.SESSION_SECRET,
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: true,
   cookie: {}
 };
 
@@ -67,19 +67,39 @@ app.get("/register", (req, res) => {
 });
 
 app.get("/secrets", (req, res) => {
+  const username = req.body.username;
   if (req.isAuthenticated()) {
-    res.render("secrets");
+    res.render("secrets", {
+      username: username
+    });
   } else {
     res.redirect("/login");
   }
 });
 
+app.get("/logout", (req, res) => {
+  req.logout();
+  req.session.destroy(err => {
+    if (!err) {
+      res
+        .status(200)
+        .clearCookie("connect.sid", { path: "/" })
+        .redirect("/");
+    } else {
+      console.log(err);
+    }
+  });
+});
+
 app.post("/register", (req, res) => {
   const username = req.body.username;
   const password = req.body.password;
-  User.register({ username: username }, password, (err, user) => {
+  User.register({ username: username }, password, err => {
     if (err) {
       console.log(err);
+      alert(
+        "There was an error in the application. Please attempt to register again."
+      );
       res.redirect("/register");
     } else {
       passport.authenticate("local")(req, res, () => {
@@ -89,9 +109,20 @@ app.post("/register", (req, res) => {
   });
 });
 
-app.post("/login", (req, res) => {
+app.post("/login", passport.authenticate("local"), (req, res) => {
   const username = req.body.username;
   const password = req.body.password;
+  const user = new User({
+    username: username,
+    password: password
+  });
+  req.login(user, err => {
+    if (err) {
+      console.log(err);
+    } else {
+      res.redirect("/secrets");
+    }
+  });
 });
 
 app.listen(process.env.PORT || 3000, () => {
