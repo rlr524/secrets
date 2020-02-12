@@ -7,6 +7,8 @@ const session = require("express-session");
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
 const env = process.env.NODE_ENV;
+const GoogleStrategy = require("passport-google-oauth20").Strategy;
+const findOrCreate = require("mongoose-findorcreate");
 
 const app = express();
 
@@ -40,23 +42,67 @@ const usersSchema = new Schema(
   {
     email: String,
     password: String,
+    googleID: String,
     active: Boolean
   },
   { timestamps: true }
 );
 
 usersSchema.plugin(passportLocalMongoose);
+usersSchema.plugin(findOrCreate);
 
 const User = mongoose.model("User", usersSchema);
 
 passport.use(User.createStrategy());
+// passport.serializeUser(User.serializeUser());
+// passport.deserializeUser(User.deserializeUser());
 
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+passport.serializeUser(function(user, done) {
+  done(null, user.id);
+});
+
+passport.deserializeUser(function(id, done) {
+  User.findById(id, function(err, user) {
+    done(err, user);
+  });
+});
+
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: "http://localhost:3000/auth/google/secrets"
+    },
+    function(accessToken, refreshToken, profile, cb) {
+      console.log(profile);
+      User.findOrCreate({ googleID: profile.id, active: true }, function(
+        err,
+        user
+      ) {
+        return cb(err, user);
+      });
+    }
+  )
+);
 
 app.get("/", (req, res) => {
   res.render("home");
 });
+
+app.get(
+  "/auth/google",
+  passport.authenticate("google", { scope: ["profile"] })
+);
+
+app.get(
+  "/auth/google/secrets",
+  passport.authenticate("google", { failureRedirect: "/login" }),
+  function(req, res) {
+    // Successful authentication, redirect to secrets page.
+    res.redirect("/secrets");
+  }
+);
 
 app.get("/login", (req, res) => {
   res.render("login");
@@ -94,7 +140,7 @@ app.get("/logout", (req, res) => {
 app.post("/register", (req, res) => {
   const username = req.body.username;
   const password = req.body.password;
-  User.register({ username: username }, password, err => {
+  User.register({ username: username, active: true }, password, err => {
     if (err) {
       console.log(err);
       alert(
