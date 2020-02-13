@@ -6,8 +6,8 @@ const Schema = mongoose.Schema;
 const session = require("express-session");
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
-const env = process.env.NODE_ENV;
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
+const FacebookStrategy = require("passport-facebook").Strategy;
 const findOrCreate = require("mongoose-findorcreate");
 
 const app = express();
@@ -17,18 +17,18 @@ app.set("view engine", "ejs");
 app.use(express.static("public"));
 app.use(bodyParser.urlencoded({ extended: true }));
 
-let sess = {
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: true,
-  cookie: {}
-};
-
-if (env === "production") {
-  sess.cookie.secure = true;
+if (process.env.NODE_ENV === "production") {
+  session.cookie.secure = true;
 }
 
-app.use(session(sess));
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: true,
+    cookie: {}
+  })
+);
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -40,9 +40,22 @@ mongoose.set("useCreateIndex", true);
 
 const usersSchema = new Schema(
   {
-    email: String,
+    username: String,
     password: String,
-    googleID: String,
+    googleID: {
+      type: String,
+      require: true,
+      index: true,
+      unique: true,
+      sparse: true
+    },
+    facebookId: {
+      type: String,
+      require: true,
+      index: true,
+      unique: true,
+      sparse: true
+    },
     active: Boolean
   },
   { timestamps: true }
@@ -54,8 +67,8 @@ usersSchema.plugin(findOrCreate);
 const User = mongoose.model("User", usersSchema);
 
 passport.use(User.createStrategy());
-// passport.serializeUser(User.serializeUser());
-// passport.deserializeUser(User.deserializeUser());
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
 passport.serializeUser(function(user, done) {
   done(null, user.id);
@@ -76,12 +89,31 @@ passport.use(
     },
     function(accessToken, refreshToken, profile, cb) {
       console.log(profile);
-      User.findOrCreate({ googleID: profile.id, active: true }, function(
-        err,
-        user
-      ) {
-        return cb(err, user);
-      });
+      User.findOrCreate(
+        { googleID: profile.id, username: profile.id, active: true },
+        function(err, user) {
+          return cb(err, user);
+        }
+      );
+    }
+  )
+);
+
+passport.use(
+  new FacebookStrategy(
+    {
+      clientID: process.env.FACEBOOK_CLIENT_ID,
+      clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
+      callbackURL: "http://localhost:3000/auth/facebook/secrets"
+    },
+    function(accessToken, refreshToken, profile, cb) {
+      console.log(profile);
+      User.findOrCreate(
+        { facebookId: profile.id, username: profile.id, active: true },
+        function(err, user) {
+          return cb(err, user);
+        }
+      );
     }
   )
 );
@@ -104,6 +136,16 @@ app.get(
   }
 );
 
+app.get("/auth/facebook", passport.authenticate("facebook"));
+
+app.get(
+  "/auth/facebook/secrets",
+  passport.authenticate("facebook", { failureRedirect: "/login" }),
+  function(req, res) {
+    res.redirect("/secrets");
+  }
+);
+
 app.get("/login", (req, res) => {
   res.render("login");
 });
@@ -113,10 +155,21 @@ app.get("/register", (req, res) => {
 });
 
 app.get("/secrets", (req, res) => {
-  const username = req.body.username;
+  let sess = req.session;
   if (req.isAuthenticated()) {
     res.render("secrets", {
-      username: username
+      username: sess.passport.user
+    });
+  } else {
+    res.redirect("/login");
+  }
+});
+
+app.get("/submit", (req, res) => {
+  let sess = req.session;
+  if (req.isAuthenticated()) {
+    res.render("submit", {
+      username: sess.passport.user
     });
   } else {
     res.redirect("/login");
