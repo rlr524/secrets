@@ -42,6 +42,7 @@ const usersSchema = new Schema(
   {
     username: String,
     password: String,
+    displayname: String,
     googleID: {
       type: String,
       require: true,
@@ -61,10 +62,21 @@ const usersSchema = new Schema(
   { timestamps: true }
 );
 
+const secretsSchema = new Schema(
+  {
+    secret: String,
+    user: String,
+    deleted: Boolean
+  },
+  { timestamps: true }
+);
+
 usersSchema.plugin(passportLocalMongoose);
 usersSchema.plugin(findOrCreate);
+secretsSchema.plugin(findOrCreate);
 
 const User = mongoose.model("User", usersSchema);
+const Secret = mongoose.model("Secret", secretsSchema);
 
 passport.use(User.createStrategy());
 passport.serializeUser(User.serializeUser());
@@ -88,9 +100,13 @@ passport.use(
       callbackURL: "http://localhost:3000/auth/google/secrets"
     },
     function(accessToken, refreshToken, profile, cb) {
-      console.log(profile);
       User.findOrCreate(
-        { googleID: profile.id, username: profile.id, active: true },
+        {
+          googleID: profile.id,
+          username: profile.id,
+          displayname: profile.displayName,
+          active: true
+        },
         function(err, user) {
           return cb(err, user);
         }
@@ -107,9 +123,13 @@ passport.use(
       callbackURL: "http://localhost:3000/auth/facebook/secrets"
     },
     function(accessToken, refreshToken, profile, cb) {
-      console.log(profile);
       User.findOrCreate(
-        { facebookId: profile.id, username: profile.id, active: true },
+        {
+          facebookId: profile.id,
+          username: profile.id,
+          displayname: profile.displayName,
+          active: true
+        },
         function(err, user) {
           return cb(err, user);
         }
@@ -155,10 +175,18 @@ app.get("/register", (req, res) => {
 });
 
 app.get("/secrets", (req, res) => {
-  let sess = req.session;
   if (req.isAuthenticated()) {
-    res.render("secrets", {
-      username: sess.passport.user
+    Secret.find({}, (err, foundSecrets) => {
+      if (err) {
+        console.log(err);
+      } else {
+        if (foundSecrets) {
+          res.render("secrets", {
+            displaySecrets: foundSecrets,
+            displayname: req.user.displayname
+          });
+        }
+      }
     });
   } else {
     res.redirect("/login");
@@ -166,14 +194,25 @@ app.get("/secrets", (req, res) => {
 });
 
 app.get("/submit", (req, res) => {
-  let sess = req.session;
   if (req.isAuthenticated()) {
     res.render("submit", {
-      username: sess.passport.user
+      displayname: req.user.displayname
     });
   } else {
     res.redirect("/login");
   }
+});
+
+app.post("/submit", (req, res) => {
+  const submittedSecret = req.body.secret;
+  const user = req.user.id;
+  const secret = new Secret({
+    secret: submittedSecret,
+    user: user,
+    deleted: false
+  });
+  secret.save();
+  res.redirect("/secrets");
 });
 
 app.get("/logout", (req, res) => {
@@ -193,19 +232,24 @@ app.get("/logout", (req, res) => {
 app.post("/register", (req, res) => {
   const username = req.body.username;
   const password = req.body.password;
-  User.register({ username: username, active: true }, password, err => {
-    if (err) {
-      console.log(err);
-      alert(
-        "There was an error in the application. Please attempt to register again."
-      );
-      res.redirect("/register");
-    } else {
-      passport.authenticate("local")(req, res, () => {
-        res.redirect("/secrets");
-      });
+  const displayname = req.body.username;
+  User.register(
+    { username: username, displayname: displayname, active: true },
+    password,
+    err => {
+      if (err) {
+        console.log(err);
+        alert(
+          "There was an error in the application. Please attempt to register again."
+        );
+        res.redirect("/register");
+      } else {
+        passport.authenticate("local")(req, res, () => {
+          res.redirect("/secrets");
+        });
+      }
     }
-  });
+  );
 });
 
 app.post("/login", passport.authenticate("local"), (req, res) => {
@@ -213,6 +257,7 @@ app.post("/login", passport.authenticate("local"), (req, res) => {
   const password = req.body.password;
   const user = new User({
     username: username,
+    displayname: username,
     password: password
   });
   req.login(user, err => {
