@@ -1,6 +1,6 @@
 {
   "name": "secrets",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Secrets app for LAB course",
   "main": "server.js",
   "scripts": {
